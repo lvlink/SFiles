@@ -30,7 +30,7 @@ void help()
 void welcome()
 {
 	printf("+-------------------------- LyuFis --------------------------+\n");
-	printf("|                       Welcome rinkya                       |\n");
+	printf("                        Welcome %-6s                       \n",pwd->pw_name);
 	printf("|function: simple operations & core dump                     |\n");
 	printf("|operations:                                                 |\n");
 	printf("|(0)  cd:     get in a dir                                   |\n");
@@ -47,6 +47,22 @@ void welcome()
 	printf("|(11) exit:   exit the LyuFis and save the LyuFis as file.   |\n");
 	printf("|(12) help:   print operations helps                         |\n");
 	printf("+------------------------------------------------------------+\n\n");
+}
+
+void init()
+{
+	Fat = (fat*)(myvhard + BLOCKSIZE);
+	ilist = (inode*)(myvhard + 3 * BLOCKSIZE);
+	cpBasicInfo(&openfilelist[0], &ilist[0]);
+	strcpy(openfilelist[0].filename, "root");
+	openfilelist[0].dirBnum = 5;
+	openfilelist[0].offset = 0;
+	strcpy(openfilelist[0].dir, "/root/");
+	openfilelist[0].count = 0;
+	openfilelist[0].fcbstate = 0;
+	openfilelist[0].topenfile = 1;
+        curdir = 0;
+	return;
 }
 
 void startsys()
@@ -68,21 +84,9 @@ void startsys()
 		do_format();
 	}
 	
-	Fat = (fat*)(myvhard + BLOCKSIZE);	
-	ilist = (inode*)(myvhard + 3 * BLOCKSIZE);
-	cpBasicInfo(&openfilelist[0], &ilist[0]);
-	strcpy(openfilelist[0].filename, "root");
-	openfilelist[0].dirBnum = 5;
-	openfilelist[0].offset = 0;
-	strcpy(openfilelist[0].dir, "/root/");
-	openfilelist[0].count = 0;
-	openfilelist[0].fcbstate = 0;
-	openfilelist[0].topenfile = 1;
-	
-	curdir = 0;
+	init();
 	return;
 }
-
 void exitsys()
 {
 	
@@ -99,17 +103,7 @@ void exitsys()
 void my_format()
 {
 	do_format();
-	ilist = (inode*)(myvhard + 3 * BLOCKSIZE);
-	cpBasicInfo(&openfilelist[0], &ilist[0]);
-	strcpy(openfilelist[0].filename, "root");
-	openfilelist[0].dirBnum = 5;
-	openfilelist[0].offset = 0;
-	strcpy(openfilelist[0].dir, "/root/");
-	openfilelist[0].count = 0;
-	openfilelist[0].fcbstate = 0;
-	openfilelist[0].topenfile = 1;
-
-	curdir = 0;
+	init();
 	return;
 }
 void do_format()
@@ -155,11 +149,9 @@ void do_format()
 
 	for (i = 1; i < MAXINODENUM; i++)
 		ilist[i].free = 0;
-	/*
-	FILE* file = fopen(FILENAME,"w");
-	fwrite(myvhard,SIZE,1,file);
-	fclose(file);
-	*/
+
+	for(i = 0;i<MAXOPENFILE;i++)
+		openfilelist[i].topenfile = 0;
 	return;
 }
 
@@ -167,7 +159,6 @@ void my_cd(char* dirname)
 {
 	int i, fd;
 	char *dir;
-	inode* ino;
 	if (openfilelist[curdir].attribute == 1)
 	{
 		printf("you just open a datafile, exit first!");
@@ -199,13 +190,12 @@ void my_cd(char* dirname)
 	return;
 
 FIND:
-	ino = &ilist[flist[i].iptr];
 	if ((fd = getOpenNode()) == -1)
 	{
 		printf("OpenFileList full!\n");
 		return;
 	}
-	cpBasicInfo(&openfilelist[fd], ino);
+	cpBasicInfo(&openfilelist[fd], &ilist[flist[i].iptr]);
 	strcpy(openfilelist[fd].filename, flist[i].filename);
 	openfilelist[fd].count = 0;
 	addDir(&openfilelist[fd], &openfilelist[curdir], dirname,0);
@@ -248,10 +238,12 @@ GET:
 	if ((fd = getOpenNode()) == -1)
 	{
 		printf("Openfilelist is full\n");
+		ilist[inum].free = 0;
 		return -1;
 	}
 	if ((blockNum = getNewBlock()) == END)
 	{
+		ilist[inum].free = 0;
 		printf("Disk is full\n");
 		openfilelist[fd].topenfile = 0;
 		return -1;
@@ -312,7 +304,7 @@ GET:
 
 void my_rmdir(char* dirname)
 {
-	int i, blockNum, nextBlock = 0, mnum;
+	int i, blockNum, mnum;
 	char buf[BLOCKSIZE + 1];
 
 	if (!strcmp(dirname, ".") || !strcmp(dirname, ".."))
@@ -343,17 +335,8 @@ FIND:
 	}
 
 	blockNum = ilist[flist[i].iptr].first;
-
-	while (1)
-	{
-		nextBlock = Fat[blockNum].id;
-		Fat[blockNum].id = FREE;
-		if (nextBlock != END)
-			blockNum = nextBlock;
-		else
-			break;
-	}
-
+	Fat[blockNum].id = FREE;
+		
 	ilist[flist[i].iptr].free = 0;
 	ilist[flist[i].iptr].length = 0;
 	ilist[flist[i].iptr].first = 0;
@@ -404,7 +387,7 @@ int my_create(char* filename)
 	{
 		if (flist[i].iptr == -1)
 			continue;
-		if ((!strcmp(flist[i].filename, filename)) && flist[i].iptr != -1 && ilist[flist[i].iptr].attribute == 1)
+		if ((!strcmp(flist[i].filename, filename)) && ilist[flist[i].iptr].attribute == 1)
 		{
 			printf("same name file find!\n");
 			return -1;
@@ -428,11 +411,12 @@ FIND:
 	}
 	if ((blockNum = getNewBlock()) == -1)
 	{
+		ilist[inum].free = 0;
 		printf("Disk full\n");
 		return -1;
 	}
 	flist[i].iptr = inum;
-	ilist[flist[i].iptr].first = blockNum;
+	ilist[inum].first = blockNum;
 	Fat[blockNum].id = END;
 
 	strcpy(flist[i].filename, filename);
@@ -522,21 +506,19 @@ int my_read(int fd)
 		printf("wrong fd num\n");
 		return -1;
 	}
-	int flag = -1;
+	char flag = '0';
+	printf("1.read all 2.random read \n");
 	while (1)
 	{
-		printf("1.read all 2.random read \n");
-		scanf("%d", &flag);
-		if (flag == 1 || flag == 2)
+		flag = getchar();
+		if(flag == '\n')
+			continue;
+		if (flag == '1' || flag == '2')
 			break;
 		else
-		{
-			flag = -1;
-			fflush(stdin);
-			continue;
-		}
+			printf("wrong flag!\n1.read all 2.random read \n");
 	}
-	if (flag == 1)
+	if (flag == '1')
 	{
 		openfilelist[fd].count = 0;
 		do_read(fd, openfilelist[fd].length, buf);
@@ -568,7 +550,7 @@ int do_read(int fd, int len, char* text)
 		offset -= BLOCKSIZE;
 		if ((blockNum = Fat[blockNum].id) == END)
 		{
-			printf("File read Error!\n");
+			printf("File read Error, Overread!\n");
 			return -1;
 		}
 	}
@@ -581,9 +563,7 @@ int do_read(int fd, int len, char* text)
 	{
 		if (BLOCKSIZE - offset > readLen)
 		{
-			memcpy(text, buf + offset, readLen);
-			textptr += readLen;
-			offset += readLen;
+			memcpy(textptr, buf + offset, readLen);
 			openfilelist[fd].count += readLen;
 			readLen = 0;
 		}
@@ -599,6 +579,8 @@ int do_read(int fd, int len, char* text)
 			}
 			blockPtr = (char*)myvhard + BLOCKSIZE * blockNum;
 			memcpy(buf, blockPtr, BLOCKSIZE);
+			offset = 0;
+			openfilelist[fd].count+=BLOCKSIZE-offset;
 		}
 
 	}
@@ -622,24 +604,26 @@ int my_write(int fd)
 		printf("you can write datafile only!\n");
 		return -1;
 	}
+	printf("1.Cur write 2.Cover write 3.Append write 4. Random write\n");
 	while (1)
 	{
-		fflush(stdin);
-		printf("1.Cur write 2.Cover write 3.Append write 4. Random write\n");
-		scanf("%d", &wstyle);
-		if (wstyle < 1 || wstyle> 4)
-			printf("num error! please retype!\n");
-		else
+		wstyle = getchar();
+		if(wstyle == '\n')
+			continue;
+		if (wstyle == '1' || wstyle == '2' || wstyle == '3' || wstyle == '4')
 			break;
+		else
+			printf("num error! please retype!\n1.Cur write 2.Cover write 3.Append write 4. Random write\n");
 	}
+	wstyle -='0';
 	printf("type the data and enter # as end!\n");
 	getchar();
 	while ((input = getchar()) != '#')
 	{
 		buf[tp] = input;
-		buf[tp + 1] = '\0';
 		tp++;
 	}
+	buf[tp]='\0';
 
 	do_write(fd, buf, strlen(buf) + 1, wstyle);
 	openfilelist[fd].fcbstate = 1;
@@ -726,33 +710,34 @@ int do_write(int fd, char* text, int len, char wstyle)
 	openfilelist[fd].count += len;
 	if (openfilelist[fd].count > openfilelist[fd].length)
 		openfilelist[fd].length = openfilelist[fd].count;
-
-	if (wstyle == 1 || (wstyle == 2 && openfilelist[fd].attribute == 0))
+	
+	blockNum = Fat[openfilelist[fd].first].id;
+	if (wstyle)
 	{
 
 		offset = openfilelist[fd].length;
 		while (offset >= BLOCKSIZE)
 		{
-			blockNum = Fat[openfilelist[fd].first].id;
 			offset -= BLOCKSIZE;
+			blockNum = Fat[blockNum].id;
 		}
-		int temp = blockNum;
+		int record = blockNum;
 		while (1)
 		{
-			if (Fat[temp].id != END)
+			if (Fat[blockNum].id != END)
 			{
-				i = Fat[temp].id;
-				Fat[temp].id = FREE;
-				temp = i;
+				i = Fat[blockNum].id;
+				Fat[blockNum].id = FREE;
+				blockNum = i;
 			}
 			else
 			{
-				Fat[temp].id = FREE;
+				Fat[blockNum].id = FREE;
 				break;
 			}
 		}
 
-		Fat[blockNum].id = END;
+		Fat[record].id = END;
 	}
 	return len;
 }
