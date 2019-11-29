@@ -57,7 +57,10 @@ int main()
 		case 0: // cd
 			oprd = strtok(NULL, " ");
 			if (oprd != NULL)
-				my_cd(oprd);
+				if(strlen(oprd)>8)
+					printf("Dir name should lower than 8!\n");
+				else
+					my_cd(oprd);
 			else
 				printf("please Enter dir name\n");
 			break;
@@ -81,7 +84,10 @@ int main()
 		case 4: // create
 			oprd = strtok(NULL, " ");
 			if (oprd != NULL)
-				my_create(oprd);
+				if(strlen(oprd)>8)
+					printf("File name should lower than 8!\n");
+				else
+					my_create(oprd);
 			else
 				printf("please Enter file name\n");
 			break;

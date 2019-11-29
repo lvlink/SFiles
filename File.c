@@ -112,7 +112,7 @@ void do_format()
 	time_t rawTime;
 	struct tm *info;
 	block0* superBlock = (block0*)myvhard;
-	strcpy(superBlock->information, "ニャー　ニャー　ニャー");
+	strcpy(superBlock->information, "ニャー　ニャー　ニャー\nsuperBlock[1] => Fat List[2] => inode list[2] => root[1] => otherFile[994] ");
 	superBlock->root = 5;
 	superBlock->startblock = myvhard + 5 * BLOCKSIZE;
 
@@ -493,7 +493,7 @@ FIND:
 
 	ilist[flist[0].iptr].length = openfilelist[curdir].length;
 	openfilelist[curdir].count = 0;
-	do_write(curdir, (char*)(flist), sizeof(fnode), 2);
+	//do_write(curdir, (char*)(flist), sizeof(fnode), 2);
 
 	openfilelist[curdir].fcbstate = 1;
 }
@@ -658,6 +658,8 @@ int do_write(int fd, char* text, int len, char wstyle)
 		scanf("%ud", &pos);
 		pos--;
 		openfilelist[fd].count = pos;
+		if(pos+len<openfilelist[fd].length)
+			len--;
 	}
 
 	offset = openfilelist[fd].count;
